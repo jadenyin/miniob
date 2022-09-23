@@ -28,6 +28,12 @@ See the Mulan PSL v2 for more details. */
 #include "storage/index/index.h"
 #include "storage/index/bplus_tree_index.h"
 #include "storage/trx/trx.h"
+#include "sql/operator/table_scan_operator.h"
+#include "sql/operator/index_scan_operator.h"
+#include "sql/operator/predicate_operator.h"
+#include "sql/operator/delete_operator.h"
+#include "sql/operator/project_operator.h"
+#include "sql/stmt/filter_stmt.h"
 
 Table::~Table()
 {
@@ -635,9 +641,9 @@ RC Table::create_index(Trx *trx, const char *index_name, const char *attribute_n
   return rc;
 }
 
-RC Table::update_record(Trx *trx, const char *attribute_name, const Value *value, int condition_num,
-    const Condition conditions[], int *updated_count)
+RC Table::update_record(Trx *trx, const char *attribute_name, const Value *value,ConditionFilter *filter_stmt)
 {
+
   return RC::GENERIC_ERROR;
 }
 

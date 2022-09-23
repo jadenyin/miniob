@@ -23,6 +23,7 @@ class DiskBufferPool;
 class RecordFileHandler;
 class RecordFileScanner;
 class ConditionFilter;
+class FilterStmt;
 class DefaultConditionFilter;
 class Index;
 class IndexScanner;
@@ -54,8 +55,8 @@ public:
   RC open(const char *meta_file, const char *base_dir);
 
   RC insert_record(Trx *trx, int value_num, const Value *values);
-  RC update_record(Trx *trx, const char *attribute_name, const Value *value, int condition_num,
-      const Condition conditions[], int *updated_count);
+  RC insert_record(Trx *trx, Record *record);
+  RC update_record(Trx *trx, const char *attribute_name, const Value *value, ConditionFilter *filter_stmt);
   RC delete_record(Trx *trx, ConditionFilter *filter, int *deleted_count);
   RC delete_record(Trx *trx, Record *record);
 
@@ -91,8 +92,6 @@ private:
       RC (*record_reader)(Record *record, void *context));
   IndexScanner *find_index_for_scan(const ConditionFilter *filter);
   IndexScanner *find_index_for_scan(const DefaultConditionFilter &filter);
-
-  RC insert_record(Trx *trx, Record *record);
 
 private:
   friend class RecordUpdater;
