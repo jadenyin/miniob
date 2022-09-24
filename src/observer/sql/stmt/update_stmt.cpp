@@ -26,7 +26,7 @@ RC UpdateStmt::create(Db *db, const Updates &update, Stmt *&stmt)
 {
   const char *table_name = update.relation_name;
   char *attribute_name=update.attribute_name;
-  if (nullptr == db || nullptr == table_name || update.condition_num < 0) {
+  if (nullptr == db || nullptr == table_name || update.condition_num < 0 ) {
     LOG_WARN("invalid argument. db=%p, table_name=%p, value_num=%d", 
              db, table_name, update.attribute_name);
     return RC::INVALID_ARGUMENT;
@@ -38,7 +38,6 @@ RC UpdateStmt::create(Db *db, const Updates &update, Stmt *&stmt)
     LOG_WARN("no such table. db=%s, table_name=%s", db->name(), table_name);
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
-
   // check the fields number
   Value value = update.value;
   int condition_num = update.condition_num;
@@ -50,6 +49,12 @@ RC UpdateStmt::create(Db *db, const Updates &update, Stmt *&stmt)
   }
   std::unordered_map<std::string, Table *> table_map;
   table_map.insert(std::pair<std::string, Table *>(std::string(table_name), table));
+
+  const FieldMeta *field_meta=table_meta.field(attribute_name);
+  if(field_meta==nullptr){
+    LOG_WARN("non-exist column %p", attribute_name);
+    return RC::SCHEMA_FIELD_NOT_EXIST;
+  }
 
   FilterStmt *filter_stmt = nullptr;
   RC rc = FilterStmt::create(db, table, &table_map,
