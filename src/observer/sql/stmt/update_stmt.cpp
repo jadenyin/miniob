@@ -26,7 +26,7 @@ RC UpdateStmt::create(Db *db, const Updates &update, Stmt *&stmt)
 {
   const char *table_name = update.relation_name;
   char *attribute_name=update.attribute_name;
-  if (nullptr == db || nullptr == table_name || update.condition_num <= 0) {
+  if (nullptr == db || nullptr == table_name || update.condition_num < 0) {
     LOG_WARN("invalid argument. db=%p, table_name=%p, value_num=%d", 
              db, table_name, update.attribute_name);
     return RC::INVALID_ARGUMENT;
