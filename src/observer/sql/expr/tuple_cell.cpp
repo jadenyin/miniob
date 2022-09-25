@@ -34,6 +34,20 @@ void TupleCell::to_string(std::ostream &os) const
       os << data_[i];
     }
   } break;
+  case DATES: {
+    int date=*(int *)data_;
+    int y,m,d;
+    y=date/10000;
+    date-=y*10000;
+    m=date/100;
+    date-=m*100;
+    d=date;
+    os << y << '-' ;
+    if(m<10)  os<<'0';
+    os << m << '-';
+    if(d<10)  os<<'0';
+    os<<d;
+  } break;
   default: {
     LOG_WARN("unsupported attr type: %d", attr_type_);
   } break;
@@ -47,6 +61,7 @@ int TupleCell::compare(const TupleCell &other) const
     case INTS: return compare_int(this->data_, other.data_);
     case FLOATS: return compare_float(this->data_, other.data_);
     case CHARS: return compare_string(this->data_, this->length_, other.data_, other.length_);
+    case DATES: return compare_date(this->data_,other.data_);
     default: {
       LOG_WARN("unsupported type: %d", this->attr_type_);
     }

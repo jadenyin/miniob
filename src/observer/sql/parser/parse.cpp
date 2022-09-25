@@ -22,6 +22,14 @@ RC parse(char *st, Query *sqln);
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
+bool check_date(int y, int m, int d)
+{
+    static int mon[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    bool leap = (y%400==0 || (y%100 && y%4==0));
+    return y > 0
+        && (m > 0)&&(m <= 12) 
+        && (d > 0)&&(d <= ((m==2 && leap)?1:0) + mon[m]);
+}
 void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name)
 {
   if (relation_name != nullptr) {
@@ -56,6 +64,18 @@ void value_init_string(Value *value, const char *v)
 {
   value->type = CHARS;
   value->data = strdup(v);
+}
+int value_init_date(Value *value, const char *v)
+{
+  value->type = DATES;
+  int y,m,d;
+  sscanf(v,"%d-%d-%d",&y,&m,&d);
+  bool b = check_date(y,m,d);
+  if(!b)  return 0;
+  int date=y*10000+m*100+d;
+  value->data=malloc(sizeof(date));
+  memcpy(value->data,&date,sizeof(date));
+  return 1;
 }
 void value_destroy(Value *value)
 {
@@ -397,8 +417,10 @@ extern "C" int sql_parse(const char *st, Query *sqls);
 
 RC parse(const char *st, Query *sqln)
 {
-  sql_parse(st, sqln);
-
+  int ret=sql_parse(st, sqln);
+  if(ret==1){
+    return INVALID_ARGUMENT;
+  }
   if (sqln->flag == SCF_ERROR)
     return SQL_SYNTAX;
   else

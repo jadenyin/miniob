@@ -54,6 +54,9 @@ public:
     case CHARS: {
       return compare_string((void *)v1, attr_length_, (void *)v2, attr_length_);
     }
+    case DATES: {
+      return compare_date((void *)v1,(void *)v2);
+    }
     default:{
       LOG_ERROR("unknown attr type. %d", attr_type_);
       abort();
@@ -123,6 +126,19 @@ public:
 	str.push_back(v[i]);
       }
       return str;
+    }
+    case DATES: {
+      std::string str;
+      for(int i=0;i<4;i++){
+        str.push_back(v[i]);
+      }
+      str.push_back('-');
+      for(int i=4;i<8;i++){
+        str.push_back(v[i]);
+        if(i==5){
+          str.push_back('-');
+        }
+      }
     }
     default:{
       LOG_ERROR("unknown attr type. %d", attr_type_);
