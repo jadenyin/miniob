@@ -51,6 +51,11 @@ RC UpdateStmt::create(Db *db, const Updates &update, Stmt *&stmt)
   table_map.insert(std::pair<std::string, Table *>(std::string(table_name), table));
 
   const FieldMeta *field_meta=table_meta.field(attribute_name);
+  //check the fields type
+  if (field_meta->type()!=value.type){
+    LOG_WARN("inconsistent type:%p", attribute_name);
+    return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+  }
   if(field_meta==nullptr){
     LOG_WARN("non-exist column %p", attribute_name);
     return RC::SCHEMA_FIELD_NOT_EXIST;
