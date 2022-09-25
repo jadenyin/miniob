@@ -52,13 +52,13 @@ RC UpdateStmt::create(Db *db, const Updates &update, Stmt *&stmt)
 
   const FieldMeta *field_meta=table_meta.field(attribute_name);
   //check the fields type
-  if (field_meta->type()!=value.type){
-    LOG_WARN("inconsistent type:%p", attribute_name);
-    return RC::SCHEMA_FIELD_TYPE_MISMATCH;
-  }
   if(field_meta==nullptr){
     LOG_WARN("non-exist column %p", attribute_name);
     return RC::SCHEMA_FIELD_NOT_EXIST;
+  }
+  if (field_meta->type()!=value.type){
+    LOG_WARN("inconsistent type:%p", attribute_name);
+    return RC::SCHEMA_FIELD_TYPE_MISMATCH;
   }
 
   FilterStmt *filter_stmt = nullptr;
