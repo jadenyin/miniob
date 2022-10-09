@@ -490,19 +490,33 @@ RC ExecuteStage::do_select_avg(SQLStageEvent *sql_event)
     ss << select_stmt->query_fields()[0].field_name()[i];
   }
   ss << ")"<< std::endl;
+  int avg_int=0;
+  float avg_float=0;
+  int num=0;
   while ((rc = project_oper.next()) == RC::SUCCESS) {
     // get current record
     // write to response
     Tuple * tuple = project_oper.current_tuple();
+    TupleCell cell;
+    tuple->cell_at(0,cell);
     if (nullptr == tuple) {
       rc = RC::INTERNAL;
       LOG_WARN("failed to get current record. rc=%s", strrc(rc));
       break;
     }
-
-    tuple_to_string(ss, *tuple);
-    ss << std::endl;
+    if(cell.attr_type()==INTS){
+      avg_int+=*(int*)cell.data();
+    }else{
+      avg_float+=*(float*)cell.data();
+    }
+    num++;
   }
+    if(avg_int!=0){
+      ss << avg_int/num;
+    }else{
+      ss << avg_float/num;
+    }
+    ss << std::endl;
 
   if (rc != RC::RECORD_EOF) {
     LOG_WARN("something wrong while iterate operator. rc=%s", strrc(rc));
