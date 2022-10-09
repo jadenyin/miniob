@@ -122,6 +122,10 @@ ParserContext *get_context(yyscan_t scanner)
 %token <string> STAR
 %token <string> STRING_V
 %token <string> DATE_STR
+%token <string> MAX
+%token <string> MIN
+%token <string> COUNT
+%token <string> AVG
 //非终结符
 
 %type <number> type;
@@ -352,7 +356,7 @@ select:				/*  select 语句的语法解析树*/
 
 			selects_append_conditions(&CONTEXT->ssql->sstr.selection, CONTEXT->conditions, CONTEXT->condition_length);
 
-			CONTEXT->ssql->flag=SCF_SELECT;//"select";
+			
 			// CONTEXT->ssql->sstr.selection.attr_num = CONTEXT->select_length;
 
 			//临时变量清零
@@ -368,17 +372,50 @@ select_attr:
 			RelAttr attr;
 			relation_attr_init(&attr, NULL, "*");
 			selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+			CONTEXT->ssql->flag=SCF_SELECT;//"select";
 		}
     | ID attr_list {
 			RelAttr attr;
 			relation_attr_init(&attr, NULL, $1);
 			selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+			CONTEXT->ssql->flag=SCF_SELECT;//"select";
 		}
   	| ID DOT ID attr_list {
 			RelAttr attr;
 			relation_attr_init(&attr, $1, $3);
 			selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
-		}
+			CONTEXT->ssql->flag=SCF_SELECT;//"select";
+		} 
+	| MAX LBRACE ID attr_list RBRACE{
+			RelAttr attr;
+			relation_attr_init(&attr,NULL,$3);
+			selects_append_attribute(&CONTEXT->ssql->sstr.selection,&attr);
+			CONTEXT->ssql->flag=SCF_SELECT_MAX;//"select";
+	}
+	| MIN LBRACE ID attr_list RBRACE{
+			RelAttr attr;
+			relation_attr_init(&attr,NULL,$3);
+			selects_append_attribute(&CONTEXT->ssql->sstr.selection,&attr);
+			CONTEXT->ssql->flag=SCF_SELECT_MIN;//"select";
+	}
+	| COUNT LBRACE ID attr_list RBRACE{
+			RelAttr attr;
+			relation_attr_init(&attr,NULL,$3);
+			selects_append_attribute(&CONTEXT->ssql->sstr.selection,&attr);
+			CONTEXT->ssql->flag=SCF_SELECT_COUNT;//"select";
+	}
+	| COUNT LBRACE STAR RBRACE{
+			RelAttr attr;
+			relation_attr_init(&attr,NULL,"*");
+			selects_append_attribute(&CONTEXT->ssql->sstr.selection,&attr);
+			CONTEXT->ssql->flag=SCF_SELECT_COUNT;//"select";
+	}
+	| AVG LBRACE ID attr_list RBRACE{
+			RelAttr attr;
+			relation_attr_init(&attr,NULL,$3);
+			selects_append_attribute(&CONTEXT->ssql->sstr.selection,&attr);
+			CONTEXT->ssql->flag=SCF_SELECT_AVG;//"select";
+	}
     ;
 attr_list:
     /* empty */

@@ -31,10 +31,10 @@ public:
 
   SelectStmt() = default;
   ~SelectStmt() override;
-
+  int aggregate_type;
   StmtType type() const override { return StmtType::SELECT; }
 public:
-  static RC create(Db *db, const Selects &select_sql, Stmt *&stmt);
+  static RC create(Db *db, const Selects &select_sql, Stmt *&stmt,int aggregate_type);
 
 public:
   const std::vector<Table *> &tables() const { return tables_; }

@@ -32,7 +32,19 @@ RC Stmt::create_stmt(Db *db, const Query &query, Stmt *&stmt)
       return DeleteStmt::create(db, query.sstr.deletion, stmt);   
     }
   case SCF_SELECT: {
-    return SelectStmt::create(db, query.sstr.selection, stmt);
+    return SelectStmt::create(db, query.sstr.selection, stmt,0);
+  }
+  case SCF_SELECT_AVG: {
+    return SelectStmt::create(db, query.sstr.selection, stmt,1);
+  }
+  case SCF_SELECT_COUNT: {
+    return SelectStmt::create(db, query.sstr.selection, stmt,2);
+  }
+  case SCF_SELECT_MAX: {
+    return SelectStmt::create(db, query.sstr.selection, stmt,3);
+  }
+  case SCF_SELECT_MIN: {
+    return SelectStmt::create(db, query.sstr.selection, stmt,4);
   }
   case SCF_UPDATE: {
     return UpdateStmt::create(db,query.sstr.update,stmt);

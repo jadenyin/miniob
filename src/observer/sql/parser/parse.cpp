@@ -358,6 +358,18 @@ void query_reset(Query *query)
     case SCF_SELECT: {
       selects_destroy(&query->sstr.selection);
     } break;
+    case SCF_SELECT_AVG: {
+      selects_destroy(&query->sstr.selection);
+    } break;
+    case SCF_SELECT_COUNT: {
+      selects_destroy(&query->sstr.selection);
+    } break;
+    case SCF_SELECT_MAX: {
+      selects_destroy(&query->sstr.selection);
+    } break;
+    case SCF_SELECT_MIN: {
+      selects_destroy(&query->sstr.selection);
+    } break;
     case SCF_INSERT: {
       inserts_destroy(&query->sstr.insertion);
     } break;

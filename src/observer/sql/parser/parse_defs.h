@@ -157,6 +157,10 @@ union Queries {
 enum SqlCommandFlag {
   SCF_ERROR = 0,
   SCF_SELECT,
+  SCF_SELECT_MAX,
+  SCF_SELECT_MIN,
+  SCF_SELECT_COUNT,
+  SCF_SELECT_AVG,
   SCF_INSERT,
   SCF_UPDATE,
   SCF_DELETE,

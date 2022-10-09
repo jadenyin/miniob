@@ -39,7 +39,7 @@ public:
 
   int compare(const TupleCell &other) const;
 
-  const char *data() const
+  char *data() const
   {
     return data_;
   }
