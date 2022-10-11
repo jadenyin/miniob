@@ -27,11 +27,11 @@ void TupleCell::to_string(std::ostream &os) const
     os << *(float *)data_;
   } break;
   case CHARS: {
-    for (int i = 0; i < length_; i++) {
+    for (int i = 0; i < MAX_DATA; i++) {
       if (data_[i] == '\0') {
         break;
       }
-      os << data_[i];
+      os << (char)toupper(data_[i]);
     }
   } break;
   case DATES: {

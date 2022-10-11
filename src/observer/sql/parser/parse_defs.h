@@ -49,6 +49,14 @@ typedef enum
   DATES
 } AttrType;
 
+typedef enum
+{
+  SELECT_MAX,
+  SELECT_MIN,
+  SELECT_COUNT,
+  SELECT_AVG
+} AggrType;
+
 //属性值
 typedef struct _Value {
   AttrType type;  // type of value
@@ -71,6 +79,7 @@ typedef struct _Condition {
 typedef struct {
   size_t attr_num;                // Length of attrs in Select clause
   RelAttr attributes[MAX_NUM];    // attrs in Select clause
+  AggrType aggregate_type[MAX_NUM];  // aggregation func type
   size_t relation_num;            // Length of relations in Fro clause
   char *relations[MAX_NUM];       // relations in From clause
   size_t condition_num;           // Length of conditions in Where clause
@@ -157,10 +166,7 @@ union Queries {
 enum SqlCommandFlag {
   SCF_ERROR = 0,
   SCF_SELECT,
-  SCF_SELECT_MAX,
-  SCF_SELECT_MIN,
-  SCF_SELECT_COUNT,
-  SCF_SELECT_AVG,
+  SCF_SELECT_AGGR,
   SCF_INSERT,
   SCF_UPDATE,
   SCF_DELETE,

@@ -45,10 +45,7 @@ protected:
   RC do_show_tables(SQLStageEvent *sql_event);
   RC do_desc_table(SQLStageEvent *sql_event);
   RC do_select(SQLStageEvent *sql_event);
-  RC do_select_avg(SQLStageEvent *sql_event);
-  RC do_select_count(SQLStageEvent *sql_event);
-  RC do_select_max(SQLStageEvent *sql_event);
-  RC do_select_min(SQLStageEvent *sql_event);
+  RC do_select_aggregate(SQLStageEvent *sql_event);
   RC do_insert(SQLStageEvent *sql_event);
   RC do_delete(SQLStageEvent *sql_event);
   RC do_update(SQLStageEvent *sql_event);

@@ -141,15 +141,8 @@ void ExecuteStage::handle_request(common::StageEvent *event)
       if(select_stmt->aggregate_type==0){
         do_select(sql_event);
       }else if(select_stmt->aggregate_type==1){
-        do_select_avg(sql_event);
-      }else if(select_stmt->aggregate_type==2){
-        do_select_count(sql_event);
-      }else if(select_stmt->aggregate_type==3){
-        do_select_max(sql_event);
-      }else if(select_stmt->aggregate_type==4){
-        do_select_min(sql_event);
+        do_select_aggregate(sql_event);
       }
-      
     } break;
     case StmtType::INSERT: {
       do_insert(sql_event);
@@ -446,106 +439,18 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
   return rc;
 }
 
-RC ExecuteStage::do_select_avg(SQLStageEvent *sql_event)
+RC ExecuteStage::do_select_aggregate(SQLStageEvent *sql_event)
 {
   SelectStmt *select_stmt = (SelectStmt *)(sql_event->stmt());
   SessionEvent *session_event = sql_event->session_event();
   RC rc = RC::SUCCESS;
+  int tuple_num=0;
   if (select_stmt->tables().size() != 1) {
     LOG_WARN("select more than 1 tables is not supported");
     rc = RC::UNIMPLENMENT;
     return rc;
   }
-  if(select_stmt->query_fields().size()!=1){
-    session_event->set_response("FAILURE\n");
-    LOG_WARN("query fields size must be 1");
-    rc = RC::UNIMPLENMENT;
-    return rc;
-  }
-  Operator *scan_oper = try_to_create_index_scan_operator(select_stmt->filter_stmt());
-  if (nullptr == scan_oper) {
-    scan_oper = new TableScanOperator(select_stmt->tables()[0]);
-  }
 
-  DEFER([&] () {delete scan_oper;});
-
-  PredicateOperator pred_oper(select_stmt->filter_stmt());
-  pred_oper.add_child(scan_oper);
-  ProjectOperator project_oper;
-  project_oper.add_child(&pred_oper);
-  for (const Field &field : select_stmt->query_fields()) {
-    project_oper.add_projection(field.table(), field.meta());
-  }
-  rc = project_oper.open();
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to open operator");
-    return rc;
-  }
-  std::stringstream ss;
-  ss << "AVG(";
-  for (int i = 0; i < MAX_ATTR_NAME;i++) {
-    if (select_stmt->query_fields()[0].field_name()[i] == '\0') {
-      break;
-    }
-    ss << select_stmt->query_fields()[0].field_name()[i];
-  }
-  ss << ")"<< std::endl;
-  int avg_int=0;
-  float avg_float=0;
-  int num=0;
-  while ((rc = project_oper.next()) == RC::SUCCESS) {
-    // get current record
-    // write to response
-    Tuple * tuple = project_oper.current_tuple();
-    TupleCell cell;
-    tuple->cell_at(0,cell);
-    if (nullptr == tuple) {
-      rc = RC::INTERNAL;
-      LOG_WARN("failed to get current record. rc=%s", strrc(rc));
-      break;
-    }
-    if(cell.attr_type()==INTS){
-      avg_int+=*(int*)cell.data();
-    }else{
-      avg_float+=*(float*)cell.data();
-    }
-    num++;
-  }
-    if(avg_int!=0){
-      ss << avg_int/num;
-    }else{
-      ss << avg_float/num;
-    }
-    ss << std::endl;
-
-  if (rc != RC::RECORD_EOF) {
-    LOG_WARN("something wrong while iterate operator. rc=%s", strrc(rc));
-    project_oper.close();
-  } else {
-    rc = project_oper.close();
-  }
-  session_event->set_response(ss.str());
-  return rc;
-}
-
-RC ExecuteStage::do_select_count(SQLStageEvent *sql_event)
-{
-  SelectStmt *select_stmt = (SelectStmt *)(sql_event->stmt());
-  SessionEvent *session_event = sql_event->session_event();
-  Query *query =sql_event->query();
-  
-  RC rc = RC::SUCCESS;
-  if (select_stmt->tables().size() != 1) {
-    LOG_WARN("select more than 1 tables is not supported");
-    rc = RC::UNIMPLENMENT;
-    return rc;
-  }
-  if(select_stmt->query_fields().size()<1){
-    session_event->set_response("FAILURE\n");
-    LOG_WARN("query fields size must be 1");
-    rc = RC::UNIMPLENMENT;
-    return rc;
-  }
   Operator *scan_oper = try_to_create_index_scan_operator(select_stmt->filter_stmt());
   if (nullptr == scan_oper) {
     scan_oper = new TableScanOperator(select_stmt->tables()[0]);
@@ -567,34 +472,141 @@ RC ExecuteStage::do_select_count(SQLStageEvent *sql_event)
   }
 
   std::stringstream ss;
-  ss << "COUNT(";
-  if(!strcmp(query->sstr.selection.attributes[0].attribute_name,"*")){
-    ss << "*";
-  }else{
-    for (int i = 0; i < MAX_ATTR_NAME;i++) {
-      if (select_stmt->query_fields()[0].field_name()[i] == '\0') {
+  for (int i=select_stmt->query_fields().size()-1;i>=0;i--){
+    if(!strcmp(sql_event->query()->sstr.selection.attributes[0].attribute_name,"*")){
+      ss << "COUNT(*)" ;
+      break;
+    }
+    AggrType aggr_type=sql_event->query()->sstr.selection.aggregate_type[i];
+    if(aggr_type==SELECT_AVG){
+      ss << "AVG(";
+    }else if(aggr_type==SELECT_COUNT){
+      ss << "COUNT(";
+    }else if(aggr_type==SELECT_MAX){
+      ss << "MAX(";
+    }else if(aggr_type==SELECT_MIN){
+      ss << "MIN(";
+    }
+    for(int j=0;j<MAX_ATTR_NAME;j++) {
+        if (sql_event->query()->sstr.selection.attributes[i].attribute_name[j] == '\0') {
         break;
       }
-      ss << select_stmt->query_fields()[0].field_name()[i];
+      ss << (char)toupper(sql_event->query()->sstr.selection.attributes[i].attribute_name[j]);
+    }
+    ss << ")";
+    if(i!=0){
+      ss << " | ";
     }
   }
-  
-  ss << ")"<< std::endl;
-  int i=0;
-  while ((rc = project_oper.next()) == RC::SUCCESS) {
-    // get current record
-    // write to response
-    i++;
-    Tuple * tuple = project_oper.current_tuple();
-    if (nullptr == tuple) {
-      rc = RC::INTERNAL;
-      LOG_WARN("failed to get current record. rc=%s", strrc(rc));
-      break;
-    }
-  }
-  ss << i ;
   ss << std::endl;
+  std::vector<AggrType> aggr_type;
+  std::vector<AttrType> attr_type;
+  std::vector<TupleCell> cells;
+  if(!strcmp(sql_event->query()->sstr.selection.attributes[0].attribute_name,"*")){
+      int i=0;
+      while ((rc = project_oper.next()) == RC::SUCCESS) {
+        // get current record
+        // write to response
+        i++;
+        Tuple * tuple = project_oper.current_tuple();
+        if (nullptr == tuple) {
+          rc = RC::INTERNAL;
+          LOG_WARN("failed to get current record. rc=%s", strrc(rc));
+          break;
+        }
+      }
+      ss << i ;
+  }else{
+      for (int i=0,j=select_stmt->query_fields().size()-1;i<select_stmt->query_fields().size();i++,j--){
+        aggr_type.push_back(sql_event->query()->sstr.selection.aggregate_type[j]);
+        attr_type.push_back(select_stmt->query_fields()[i].attr_type());
+      }
+      while ((rc = project_oper.next()) == RC::SUCCESS) {
+      // get current record
+      // write to response
+      Tuple * tuple = project_oper.current_tuple();
+      for(int i=0;i<select_stmt->query_fields().size();i++){
+        TupleCell cell;
+        TupleCell cell_appended;
+        AggrType type=aggr_type[i];
+        cell_appended.set_type(attr_type[i]);
+        tuple->cell_at(i,cell);
+        if(type==SELECT_COUNT){
+            if(i==cells.size()){
+              cell_appended.set_data(std::to_string(1).c_str());
+              cells.push_back(cell_appended);
+            }else{
+              cell_appended.set_data(std::to_string(atoi(cells[i].data())+1).c_str());
+              cells[i]=cell_appended;
+            }
+        }else if(type==SELECT_AVG){
+          if(cell.attr_type()==INTS){
+            if(i==cells.size()){
+              cell_appended.set_data(std::to_string(*(int *)cell.data()).c_str());
+              cells.push_back(cell_appended);
+            }else{
+              int data=*(int *)cell.data()+ atoi(cells[i].data());
+              cell_appended.set_data(std::to_string(data).c_str());
+              cells[i]=cell_appended;
+            }
+          }else if(cell.attr_type()==FLOATS){
+            if(i==cells.size()){
+              cell_appended.set_data(std::to_string(*(float*)(cell.data())).c_str());
+              cells.push_back(cell_appended);
+            }else{
+              float data=*(float *)cell.data()+ atof(cells[i].data());
+              cell_appended.set_data(std::to_string(data).c_str());
+              cells[i]=cell_appended;
+            }
+          } 
+        }else if(type==SELECT_MAX){
+            if(i==cells.size()){
+              cells.push_back(cell);
+            }else{
+              if(cell.compare(cells[i])>0){
+                cells[i]=cell;
+              }
+            }
+        }else if(type==SELECT_MIN){
+            if(i==cells.size()){
+              cells.push_back(cell);
+            }else{
+              if(cell.compare(cells[i])<0){
+                cells[i]=cell;
+              }
+            }
+        }
+      }
+      tuple_num++;
+      if (nullptr == tuple) {
+        rc = RC::INTERNAL;
+        LOG_WARN("failed to get current record. rc=%s", strrc(rc));
+        break;
+      }
 
+    }
+    for(int i=0;i<select_stmt->query_fields().size();i++){
+      TupleCell cell=cells[i];
+      if(aggr_type[i]==SELECT_COUNT){
+        cell.set_type(INTS);
+        ss << atoi(cell.data());
+      }else if(aggr_type[i]==SELECT_AVG){
+        cell.set_type(attr_type[i]);
+        if(cell.attr_type()==INTS){
+          ss << atoi(cell.data())/tuple_num;
+        }else{
+          ss << atof(cell.data())/tuple_num;
+        }
+      }else{
+        cell.set_type(attr_type[i]);
+        cell.to_string(ss);
+      }
+      if(i!=select_stmt->query_fields().size()-1){
+        ss << " | ";
+      }
+    }
+  }
+  ss<<std::endl;
   if (rc != RC::RECORD_EOF) {
     LOG_WARN("something wrong while iterate operator. rc=%s", strrc(rc));
     project_oper.close();
@@ -605,163 +617,6 @@ RC ExecuteStage::do_select_count(SQLStageEvent *sql_event)
   return rc;
 }
 
-RC ExecuteStage::do_select_max(SQLStageEvent *sql_event)
-{
-  SelectStmt *select_stmt = (SelectStmt *)(sql_event->stmt());
-  SessionEvent *session_event = sql_event->session_event();
-  RC rc = RC::SUCCESS;
-  if (select_stmt->tables().size() != 1) {
-    LOG_WARN("aggregate more than 1 tables is not supported");
-    rc = RC::UNIMPLENMENT;
-    return rc;
-  }
-  if(select_stmt->query_fields().size()!=1){
-    session_event->set_response("FAILURE\n");
-    LOG_WARN("query fields size must be 1");
-    rc = RC::UNIMPLENMENT;
-    return rc;
-  }
-  Operator *scan_oper = try_to_create_index_scan_operator(select_stmt->filter_stmt());
-  if (nullptr == scan_oper) {
-    scan_oper = new TableScanOperator(select_stmt->tables()[0]);
-  }
-
-  DEFER([&] () {delete scan_oper;});
-
-  PredicateOperator pred_oper(select_stmt->filter_stmt());
-  pred_oper.add_child(scan_oper);
-  ProjectOperator project_oper;
-  project_oper.add_child(&pred_oper);
-  const Field &field=select_stmt->query_fields()[0];
-  project_oper.add_projection(field.table(), field.meta());
-  rc = project_oper.open();
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to open operator");
-    return rc;
-  }
-
-  std::stringstream ss;
-  ss << "MAX(";
-  for (int i = 0; i < MAX_ATTR_NAME;i++) {
-    if (select_stmt->query_fields()[0].field_name()[i] == '\0') {
-      break;
-    }
-    ss << select_stmt->query_fields()[0].field_name()[i];
-  }
-  ss << ")"<< std::endl;
-
-  Tuple *tuple;
-  TupleCell cell;
-  if((rc = project_oper.next()) == RC::SUCCESS){
-    tuple = project_oper.current_tuple();
-    tuple->cell_at(0,cell);
-  }
-  while ((rc = project_oper.next()) == RC::SUCCESS) {
-    // get current record
-    // write to response
-    Tuple *cur_tuple = project_oper.current_tuple();
-    TupleCell cur_cell;
-    cur_tuple->cell_at(0,cur_cell);
-
-    if (nullptr == cur_tuple) {
-      rc = RC::INTERNAL;
-      LOG_WARN("failed to get current record. rc=%s", strrc(rc));
-      break;
-    }
-    if(cur_cell.compare(cell)>0){
-      cell.set_data(cur_cell.data());
-    }
-  }
-  cell.to_string(ss);
-  ss << std::endl;
-  if (rc != RC::RECORD_EOF) {
-    LOG_WARN("something wrong while iterate operator. rc=%s", strrc(rc));
-    project_oper.close();
-  } else {
-    rc = project_oper.close();
-  }
-  session_event->set_response(ss.str());
-  return rc;
-}
-
-RC ExecuteStage::do_select_min(SQLStageEvent *sql_event)
-{
-  SelectStmt *select_stmt = (SelectStmt *)(sql_event->stmt());
-  SessionEvent *session_event = sql_event->session_event();
-  RC rc = RC::SUCCESS;
-  if (select_stmt->tables().size() != 1) {
-    LOG_WARN("select more than 1 tables is not supported");
-    rc = RC::UNIMPLENMENT;
-    return rc;
-  }
-  if(select_stmt->query_fields().size()!=1){
-    session_event->set_response("FAILURE\n");
-    LOG_WARN("query fields size must be 1");
-    rc = RC::UNIMPLENMENT;
-    return rc;
-  }
-  Operator *scan_oper = try_to_create_index_scan_operator(select_stmt->filter_stmt());
-  if (nullptr == scan_oper) {
-    scan_oper = new TableScanOperator(select_stmt->tables()[0]);
-  }
-
-  DEFER([&] () {delete scan_oper;});
-
-  PredicateOperator pred_oper(select_stmt->filter_stmt());
-  pred_oper.add_child(scan_oper);
-  ProjectOperator project_oper;
-  project_oper.add_child(&pred_oper);
-  const Field &field=select_stmt->query_fields()[0];
-  project_oper.add_projection(field.table(), field.meta());
-  rc = project_oper.open();
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to open operator");
-    return rc;
-  }
-
-  std::stringstream ss;
-  ss << "MIN(";
-  for (int i = 0; i < MAX_ATTR_NAME;i++) {
-    if (select_stmt->query_fields()[0].field_name()[i] == '\0') {
-      break;
-    }
-    ss << select_stmt->query_fields()[0].field_name()[i];
-  }
-  ss << ")" << std::endl;
-
-  Tuple *tuple;
-  TupleCell cell;
-  if((rc = project_oper.next()) == RC::SUCCESS){
-    tuple = project_oper.current_tuple();
-    tuple->cell_at(0,cell);
-  }
-  while ((rc = project_oper.next()) == RC::SUCCESS) {
-    // get current record
-    // write to response
-    Tuple *cur_tuple = project_oper.current_tuple();
-    TupleCell cur_cell;
-    cur_tuple->cell_at(0,cur_cell);
-
-    if (nullptr == cur_tuple) {
-      rc = RC::INTERNAL;
-      LOG_WARN("failed to get current record. rc=%s", strrc(rc));
-      break;
-    }
-    if(cur_cell.compare(cell)<0){
-      cell.set_data(cur_cell.data());
-    }
-  }
-  cell.to_string(ss);
-  ss << std::endl;
-  if (rc != RC::RECORD_EOF) {
-    LOG_WARN("something wrong while iterate operator. rc=%s", strrc(rc));
-    project_oper.close();
-  } else {
-    rc = project_oper.close();
-  }
-  session_event->set_response(ss.str());
-  return rc;
-}
 
 RC ExecuteStage::do_help(SQLStageEvent *sql_event)
 {
