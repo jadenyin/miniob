@@ -323,6 +323,44 @@ RC Table::insert_record(Trx *trx, int value_num, const Value *values)
   return rc;
 }
 
+RC Table::inserts_record(Trx *trx, int value_num, const Value *values)
+{
+  RC rc=RC::SUCCESS;
+  if (value_num <= 0 || nullptr == values) {
+    LOG_ERROR("Invalid argument. table name: %s, value num=%d, values=%p", name(), value_num, values);
+    return RC::INVALID_ARGUMENT;
+  }
+  std::vector<Record> records;
+  const TableMeta &table_meta=this->table_meta();
+  int field_num=table_meta.field_num()-table_meta.sys_field_num();
+  int values_num=value_num/field_num;
+  int idx=0;
+  for(idx=0;idx<value_num;idx+=field_num){
+    char *record_data;
+    rc = make_record(field_num, values+idx, record_data);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("Failed to create a record. rc=%d:%s", rc, strrc(rc));
+      break;
+    }
+    Record record;
+    record.set_data(record_data);
+    // record.valid = true;
+    rc = insert_record(trx, &record);
+    records.push_back(record);
+    //delete[] record_data;
+  }
+  /* 插入过程发生错误，回滚所有插入 */
+  if(rc!=RC::SUCCESS){
+    for(int i=0;i<records.size();i++){
+      Record record=records[i];
+      // record.valid = true;
+      delete_record(trx,&record);
+      delete[] record.data();
+    }
+  }
+  return rc;
+}
+
 const char *Table::name() const
 {
   return table_meta_.name();

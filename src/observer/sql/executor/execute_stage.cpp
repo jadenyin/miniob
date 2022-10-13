@@ -145,7 +145,12 @@ void ExecuteStage::handle_request(common::StageEvent *event)
       }
     } break;
     case StmtType::INSERT: {
-      do_insert(sql_event);
+      InsertStmt *insert_stmt=(InsertStmt*)stmt;
+      if(insert_stmt->is_inserts()){
+        do_inserts(sql_event);
+      }else{
+        do_insert(sql_event);
+      }
     } break;
     case StmtType::UPDATE: {
       do_update(sql_event);
@@ -711,6 +716,27 @@ RC ExecuteStage::do_insert(SQLStageEvent *sql_event)
 
   Table *table = insert_stmt->table();
   RC rc = table->insert_record(nullptr, insert_stmt->value_amount(), insert_stmt->values());
+  if (rc == RC::SUCCESS) {
+    session_event->set_response("SUCCESS\n");
+  } else {
+    session_event->set_response("FAILURE\n");
+  }
+  return rc;
+}
+
+RC ExecuteStage::do_inserts(SQLStageEvent *sql_event)
+{
+  Stmt *stmt = sql_event->stmt();
+  SessionEvent *session_event = sql_event->session_event();
+
+  if (stmt == nullptr) {
+    LOG_WARN("cannot find statement");
+    return RC::GENERIC_ERROR;
+  }
+
+  InsertStmt *insert_stmt = (InsertStmt *)stmt;
+  Table *table = insert_stmt->table();
+  RC rc = table->inserts_record(nullptr, insert_stmt->value_amount(), insert_stmt->values());
   if (rc == RC::SUCCESS) {
     session_event->set_response("SUCCESS\n");
   } else {

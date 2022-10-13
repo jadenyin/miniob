@@ -364,6 +364,9 @@ void query_reset(Query *query)
     case SCF_INSERT: {
       inserts_destroy(&query->sstr.insertion);
     } break;
+    case SCF_INSERTS: {
+      inserts_destroy(&query->sstr.insertion);
+    }
     case SCF_DELETE: {
       deletes_destroy(&query->sstr.deletion);
     } break;
