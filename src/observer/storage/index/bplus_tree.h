@@ -424,6 +424,7 @@ public:
    */
   RC insert_entry(const char *user_key, const RID *rid);
 
+  RC insert_entry_unique(const char *user_key, const RID *rid);
   /**
    * 从IndexHandle句柄对应的索引中删除一个值为（*pData，rid）的索引项
    * @return RECORD_INVALID_KEY 指定值不存在

@@ -65,6 +65,7 @@ public:
       void (*record_reader)(const char *data, void *context));
 
   RC create_index(Trx *trx, const char *index_name, const char *attribute_name);
+  RC create_unique_index(Trx *trx, const char *index_name, const char *attribute_name);
 
   RC get_record_scanner(RecordFileScanner &scanner);
 

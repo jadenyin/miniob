@@ -1443,6 +1443,54 @@ RC BplusTreeHandler::insert_entry(const char *user_key, const RID *rid)
   return RC::SUCCESS;
 }
 
+RC BplusTreeHandler::insert_entry_unique(const char *user_key, const RID *rid)
+{
+  if (user_key == nullptr || rid == nullptr) {
+    LOG_WARN("Invalid arguments, key is empty or rid is empty");
+    return RC::INVALID_ARGUMENT;
+  }
+
+  RC rc=RC::SUCCESS;
+  std::list<RID> rids;
+  rc=get_entry(user_key,file_header_.attr_length,rids);
+  if(!rids.empty()){
+    LOG_WARN("duplicate key.");
+    return RC::CONSTRAINT_UNIQUE;
+  }
+  
+  char *key = make_key(user_key, *rid);
+  if (key == nullptr) {
+    LOG_WARN("Failed to alloc memory for key.");
+    return RC::NOMEM;
+  }
+
+  if (is_empty()) {
+    return create_new_tree(key, rid);
+  }
+
+  Frame *frame;
+  rc = find_leaf(key, frame);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("Failed to find leaf %s. rc=%d:%s", rid->to_string().c_str(), rc, strrc(rc));
+    mem_pool_item_->free(key);
+    return rc;
+  }
+
+  rc = insert_entry_into_leaf_node(frame, key, rid);
+  if (rc != RC::SUCCESS) {
+    LOG_TRACE("Failed to insert into leaf of index, rid:%s", rid->to_string().c_str());
+    disk_buffer_pool_->unpin_page(frame);
+    mem_pool_item_->free(key);
+    // disk_buffer_pool_->check_all_pages_unpinned(file_id_);
+    return rc;
+  }
+
+  mem_pool_item_->free(key);
+  LOG_TRACE("insert entry success");
+  // disk_buffer_pool_->check_all_pages_unpinned(file_id_);
+  return RC::SUCCESS;
+}
+
 RC BplusTreeHandler::get_entry(const char *user_key, int key_len, std::list<RID> &rids)
 {
   BplusTreeScanner scanner(*this);

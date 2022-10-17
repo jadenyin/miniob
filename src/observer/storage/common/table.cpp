@@ -255,10 +255,10 @@ RC Table::rollback_insert(Trx *trx, const RID &rid)
 RC Table::insert_record(Trx *trx, Record *record)
 {
   RC rc = RC::SUCCESS;
-
   if (trx != nullptr) {
     trx->init_trx_info(this, *record);
   }
+
   rc = record_handler_->insert_record(record->data(), table_meta_.record_size(), &record->rid());
   if (rc != RC::SUCCESS) {
     LOG_ERROR("Insert record failed. table name=%s, rc=%d:%s", table_meta_.name(), rc, strrc(rc));
@@ -609,7 +609,7 @@ RC Table::create_index(Trx *trx, const char *index_name, const char *attribute_n
   }
 
   IndexMeta new_index_meta;
-  RC rc = new_index_meta.init(index_name, *field_meta);
+  RC rc = new_index_meta.init(index_name, *field_meta,false);
   if (rc != RC::SUCCESS) {
     LOG_INFO("Failed to init IndexMeta in table:%s, index_name:%s, field_name:%s",
              name(), index_name, attribute_name);
@@ -678,6 +678,96 @@ RC Table::create_index(Trx *trx, const char *index_name, const char *attribute_n
 
   return rc;
 }
+
+RC Table::create_unique_index(Trx *trx, const char *index_name, const char *attribute_name)
+{
+  if (common::is_blank(index_name) || common::is_blank(attribute_name)) {
+    LOG_INFO("Invalid input arguments, table name is %s, index_name is blank or attribute_name is blank", name());
+    return RC::INVALID_ARGUMENT;
+  }
+  if (table_meta_.index(index_name) != nullptr || table_meta_.find_index_by_field((attribute_name))) {
+    LOG_INFO("Invalid input arguments, table name is %s, index %s exist or attribute %s exist index",
+             name(), index_name, attribute_name);
+    return RC::SCHEMA_INDEX_EXIST;
+  }
+
+  const FieldMeta *field_meta = table_meta_.field(attribute_name);
+  if (!field_meta) {
+    LOG_INFO("Invalid input arguments, there is no field of %s in table:%s.", attribute_name, name());
+    return RC::SCHEMA_FIELD_MISSING;
+  }
+
+  IndexMeta new_index_meta;
+  RC rc = new_index_meta.init(index_name, *field_meta,true);
+  if (rc != RC::SUCCESS) {
+    LOG_INFO("Failed to init IndexMeta in table:%s, index_name:%s, field_name:%s",
+             name(), index_name, attribute_name);
+    return rc;
+  }
+
+  // 创建索引相关数据
+  BplusTreeIndex *index = new BplusTreeIndex();
+  std::string index_file = table_index_file(base_dir_.c_str(), name(), index_name);
+  rc = index->create(index_file.c_str(), new_index_meta, *field_meta);
+  if (rc != RC::SUCCESS) {
+    delete index;
+    LOG_ERROR("Failed to create bplus tree index. file name=%s, rc=%d:%s", index_file.c_str(), rc, strrc(rc));
+    return rc;
+  }
+
+  // 遍历当前的所有数据，插入这个索引
+  IndexInserter index_inserter(index);
+  rc = scan_record(trx, nullptr, -1, &index_inserter, insert_index_record_reader_adapter);
+  if (rc != RC::SUCCESS) {
+    // rollback
+    delete index;
+    LOG_ERROR("Failed to insert index to all records. table=%s, rc=%d:%s", name(), rc, strrc(rc));
+    return rc;
+  }
+  indexes_.push_back(index);
+
+  TableMeta new_table_meta(table_meta_);
+  rc = new_table_meta.add_index(new_index_meta);
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Failed to add index (%s) on table (%s). error=%d:%s", index_name, name(), rc, strrc(rc));
+    return rc;
+  }
+  // 创建元数据临时文件
+  std::string tmp_file = table_meta_file(base_dir_.c_str(), name()) + ".tmp";
+  std::fstream fs;
+  fs.open(tmp_file, std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
+  if (!fs.is_open()) {
+    LOG_ERROR("Failed to open file for write. file name=%s, errmsg=%s", tmp_file.c_str(), strerror(errno));
+    return RC::IOERR;  // 创建索引中途出错，要做还原操作
+  }
+  if (new_table_meta.serialize(fs) < 0) {
+    LOG_ERROR("Failed to dump new table meta to file: %s. sys err=%d:%s", tmp_file.c_str(), errno, strerror(errno));
+    return RC::IOERR;
+  }
+  fs.close();
+
+  // 覆盖原始元数据文件
+  std::string meta_file = table_meta_file(base_dir_.c_str(), name());
+  int ret = rename(tmp_file.c_str(), meta_file.c_str());
+  if (ret != 0) {
+    LOG_ERROR("Failed to rename tmp meta file (%s) to normal meta file (%s) while creating index (%s) on table (%s). "
+              "system error=%d:%s",
+        tmp_file.c_str(),
+        meta_file.c_str(),
+        index_name,
+        name(),
+        errno,
+        strerror(errno));
+    return RC::IOERR;
+  }
+
+  table_meta_.swap(new_table_meta);
+
+  LOG_INFO("Successfully added a new index (%s) on the table (%s)", index_name, name());
+
+  return rc;
+}
+
 
 RC Table::update_record(Trx *trx, const char *attribute_name, const Value *value,ConditionFilter *filter_stmt)
 {
